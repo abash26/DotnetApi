@@ -1,26 +1,30 @@
 using System.Security.Cryptography;
-using System.Text;
 using DotnetApi.Data;
 using DotnetApi.Dtos;
+using DotnetApi.Helpers;
 using DotnetApi.Models;
-using Microsoft.AspNetCore.Cryptography.KeyDerivation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DotnetApi.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("[controller]")]
 public class AuthEFController : ControllerBase
 {
   private readonly IAuthRepository _authRepository;
-  private readonly IConfiguration _config;
+  private readonly IUserRepository _userRepository;
+  private readonly AuthHelper _authHelper;
 
-  public AuthEFController(IConfiguration config, IAuthRepository authRepository)
+  public AuthEFController(IConfiguration config, IAuthRepository authRepository, IUserRepository userRepository)
   {
     _authRepository = authRepository;
-    _config = config;
+    _userRepository = userRepository;
+    _authHelper = new AuthHelper(config);
   }
 
+  [AllowAnonymous]
   [HttpPost("Register")]
   public async Task<IActionResult> Register(UserForRegistrationDto userToRegister)
   {
@@ -39,7 +43,7 @@ public class AuthEFController : ControllerBase
       rng.GetNonZeroBytes(passwordSalt);
     }
 
-    var passwordHash = GetPasswordHash(userToRegister.Password, passwordSalt);
+    var passwordHash = _authHelper.GetPasswordHash(userToRegister.Password, passwordSalt);
 
     var authData = new Auth
     {
@@ -66,6 +70,7 @@ public class AuthEFController : ControllerBase
     return BadRequest("Failed to register user");
   }
 
+  [AllowAnonymous]
   [HttpPost("Login")]
   public async Task<IActionResult> Login(UserForLoginDto userForLogin)
   {
@@ -76,7 +81,7 @@ public class AuthEFController : ControllerBase
       return NotFound("User not found.");
     }
 
-    var passwordHash = GetPasswordHash(userForLogin.Password, user.PasswordSalt);
+    var passwordHash = _authHelper.GetPasswordHash(userForLogin.Password, user.PasswordSalt);
     if (!passwordHash.SequenceEqual(user.PasswordHash))
     {
       return StatusCode(401, "Incorrect password");
@@ -84,20 +89,29 @@ public class AuthEFController : ControllerBase
     return Ok();
   }
 
-  private byte[] GetPasswordHash(string password, byte[] passwordSalt)
+  [HttpGet("RefreshToken")]
+  public IActionResult RefreshToken()
   {
-    string passwordSaltPlusString = _config.GetSection("AppSettings:PasswordKey").Value +
-          Convert.ToBase64String(passwordSalt);
+    var userIdString = User.FindFirst("userId")?.Value;
 
-    var passwordHash = KeyDerivation.Pbkdf2(
-      password: password,
-      salt: Encoding.ASCII.GetBytes(passwordSaltPlusString),
-      prf: KeyDerivationPrf.HMACSHA256,
-      iterationCount: 10000,
-      numBytesRequested: 256 / 8
-    );
+    if (string.IsNullOrEmpty(userIdString))
+    {
+      return BadRequest("User ID is missing or invalid.");
+    }
 
-    return passwordHash;
+    if (!int.TryParse(userIdString, out int userId))
+    {
+      return BadRequest("User ID is invalid.");
+    }
+
+    var user = _userRepository.GetSingleUser(userId);
+    if (user == null)
+    {
+      return NotFound("User not found.");
+    }
+
+    var token = _authHelper.CreateToken(user.UserId);
+    return Ok(new Dictionary<string, string> { { "token", token } });
   }
 }
 
