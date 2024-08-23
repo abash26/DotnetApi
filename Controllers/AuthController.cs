@@ -139,6 +139,18 @@ public class AuthController : ControllerBase
     return passwordHash;
   }
 
+  [HttpGet("RefreshToken")]
+  public IActionResult RefreshToken()
+  {
+    var userId = User.FindFirst("userId")?.Value + "";
+    var userIdSql = "SELECT UserId FROM TutorialAppSchema.Users WHERE UserId = " + userId;
+    var userIdFromDb = _dapper.LoadDataSingle<int>(userIdSql);
+
+    return Ok(new Dictionary<string, string> {
+      {"token", CreateToken(userIdFromDb)}
+    });
+  }
+
   private string CreateToken(int userId)
   {
     var claims = new Claim[]
