@@ -33,6 +33,7 @@ builder.Services.AddCors((options) =>
 );
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+builder.Services.AddScoped<IPostRepository, PostRepository>();
 
 string? tokenKeyString = builder.Configuration.GetSection("AppSettings:Token").Value;
 var tokenKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenKeyString ?? ""));

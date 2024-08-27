@@ -16,6 +16,7 @@ public class DataContextEF : DbContext
   public virtual DbSet<UserSalary> UserSalary { get; set; }
   public virtual DbSet<UserJobInfo> UserJobInfo { get; set; }
   public DbSet<Auth> Auth { get; set; }
+  public DbSet<Post> Post { get; set; }
   protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
   {
     if (!optionsBuilder.IsConfigured)
@@ -38,5 +39,10 @@ public class DataContextEF : DbContext
 
     modelBuilder.Entity<UserJobInfo>()
       .HasKey(user => user.UserId);
+
+    modelBuilder.Entity<Auth>().HasNoKey();
+
+    modelBuilder.Entity<Post>()
+       .ToTable("Posts", "TutorialAppSchema");
   }
 }
