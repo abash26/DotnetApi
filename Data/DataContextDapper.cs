@@ -12,10 +12,11 @@ class DataContextDapper
     _config = config;
   }
 
-  public IEnumerable<T> LoadData<T>(string sql)
+  public IEnumerable<T> LoadData<T>(string sql, DynamicParameters parameters = null)
   {
     var dbConnection = new SqlConnection(_config.GetConnectionString("DefaultConnection"));
-    return dbConnection.Query<T>(sql);
+    var results = dbConnection.Query<T>(sql, parameters);
+    return results;
   }
 
   public T LoadDataSingle<T>(string sql)

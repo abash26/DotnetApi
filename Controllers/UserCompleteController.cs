@@ -1,3 +1,4 @@
+using Dapper;
 using DotnetApi.Data;
 using DotnetApi.Dtos;
 using DotnetApi.Models;
@@ -7,46 +8,33 @@ namespace DotnetApi.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class UserController : ControllerBase
+public class UserCompleteController : ControllerBase
 {
   DataContextDapper _dapper;
 
-  public UserController(IConfiguration config)
+  public UserCompleteController(IConfiguration config)
   {
     _dapper = new DataContextDapper(config);
   }
 
   [HttpGet("GetUsers")]
-  public IEnumerable<User> GetUsers()
+  public ActionResult<IEnumerable<UserComplete>> GetUsers([FromQuery] int? userId = null, [FromQuery] bool? isActive = null)
   {
-    string sql = @"
-      SELECT [UserId],
-        [FirstName],
-        [LastName],
-        [Email],
-        [Gender],
-        [Active] 
-      FROM TutorialAppSchema.Users";
+    try
+    {
+      string sql = "EXEC TutorialAppSchema.spUsers_Get @UserId, @Active";
+      var parameters = new DynamicParameters();
 
-    var users = _dapper.LoadData<User>(sql);
-    return users;
-  }
+      parameters.Add("@UserId", userId);
+      parameters.Add("@Active", isActive);
 
-  [HttpGet("GetSingleUser/{userId}")]
-  public User GetSingleUser(int userId)
-  {
-    string sql = @"
-      SELECT [UserId],
-        [FirstName],
-        [LastName],
-        [Email],
-        [Gender],
-        [Active] 
-      FROM TutorialAppSchema.Users
-        WHERE UserId = " + userId.ToString();
-
-    var user = _dapper.LoadDataSingle<User>(sql);
-    return user;
+      var users = _dapper.LoadData<UserComplete>(sql, parameters);
+      return Ok(users);
+    }
+    catch (Exception ex)
+    {
+      return StatusCode(500, "Internal Server Error. Please try again later.");
+    }
   }
 
   [HttpPut("EditUser")]
@@ -106,18 +94,6 @@ public class UserController : ControllerBase
     throw new Exception("Failed to delete user");
   }
 
-  [HttpGet("GetSingleUserJobInfo/{userId}")]
-  public UserJobInfo GetSingleUserJobInfo(int userId)
-  {
-    var sql = @"
-      SELECT [UserId], [JobTitle], [Department] 
-      FROM TutorialAppSchema.UserJobInfo
-      WHERE UserId = " + userId.ToString();
-
-    var userJobInfo = _dapper.LoadDataSingle<UserJobInfo>(sql);
-    return userJobInfo;
-  }
-
   [HttpPost("AddUserJobInfo")]
   public IActionResult AddUserJobInfo(UserJobInfo userJobInfo)
   {
@@ -168,18 +144,6 @@ public class UserController : ControllerBase
       return Ok();
     }
     throw new Exception("Failed to delete user's job info");
-  }
-
-  [HttpGet("GetSingleUserSalary/{userId}")]
-  public UserSalary GetSingleUserSalary(int userId)
-  {
-    string sql = @"
-      SELECT [UserId], [Salary]
-      FROM TutorialAppSchema.UserSalary
-        WHERE UserId = " + userId.ToString();
-
-    var userSalary = _dapper.LoadDataSingle<UserSalary>(sql);
-    return userSalary;
   }
 
   [HttpPut("EditSalary")]
