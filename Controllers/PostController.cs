@@ -1,3 +1,4 @@
+using Dapper;
 using DotnetApi.Data;
 using DotnetApi.Dtos;
 using DotnetApi.Models;
@@ -19,70 +20,28 @@ public class PostController : ControllerBase
   }
 
   [HttpGet("GetPosts")]
-  public IEnumerable<Post> GetPosts()
+  public ActionResult<IEnumerable<Post>> GetPosts(
+    [FromQuery] int? postId = null,
+    [FromQuery] int? userId = null,
+    [FromQuery] string? searchValue = null)
   {
-    string sql = @"SELECT 
-        [PostId],
-        [UserId],
-        [PostTitle],
-        [PostContent],
-        [PostCreated],
-        [PostUpdated] 
-      FROM TutorialAppSchema.Posts";
+    try
+    {
+      string sql = "EXEC TutorialAppSchema.spPosts_Get @UserId, @SearchValue, @PostId";
+      var parameters = new DynamicParameters();
 
-    var posts = _dapper.LoadData<Post>(sql);
-    return posts;
-  }
+      parameters.Add("@UserId", userId);
+      parameters.Add("@SearchValue", searchValue);
+      parameters.Add("@PostId", postId);
 
-  [HttpGet("GetPostsBySearch/{searchParam}")]
-  public IEnumerable<Post> GetPostsBySearch(string searchParam)
-  {
-    string sql = @"SELECT 
-        [PostId],
-        [UserId],
-        [PostTitle],
-        [PostContent],
-        [PostCreated],
-        [PostUpdated] 
-      FROM TutorialAppSchema.Posts
-        WHERE PostTitle LIKE '%" + searchParam + "%' OR PostContent LIKE '%" + searchParam + "%'";
-
-    var posts = _dapper.LoadData<Post>(sql);
-    return posts;
-  }
-
-  [HttpGet("GetSinglePost/{postId}")]
-  public Post GetSinglePost(int postId)
-  {
-    string sql = @"SELECT 
-        [PostId],
-        [UserId],
-        [PostTitle],
-        [PostContent],
-        [PostCreated],
-        [PostUpdated]
-      FROM TutorialAppSchema.Posts
-      WHERE PostId = " + postId.ToString();
-
-    var post = _dapper.LoadDataSingle<Post>(sql);
-    return post;
-  }
-
-  [HttpGet("GetPostsByUser/{userId}")]
-  public IEnumerable<Post> GetPostsByUser(int userId)
-  {
-    string sql = @"SELECT 
-        [PostId],
-        [UserId],
-        [PostTitle],
-        [PostContent],
-        [PostCreated],
-        [PostUpdated]
-      FROM TutorialAppSchema.Posts
-      WHERE UserId = " + userId.ToString();
-
-    var posts = _dapper.LoadData<Post>(sql);
-    return posts;
+      var posts = _dapper.LoadData<Post>(sql, parameters);
+      return Ok(posts);
+    }
+    catch (Exception ex)
+    {
+      Console.WriteLine(ex);
+      return StatusCode(500, "Internal Server Error. Please try again later.");
+    }
   }
 
   [HttpGet("GetMyPosts")]
