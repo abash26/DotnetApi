@@ -47,74 +47,84 @@ public class PostController : ControllerBase
   [HttpGet("GetMyPosts")]
   public IEnumerable<Post> GetMyPosts()
   {
-    string sql = @"SELECT 
-        [PostId],
-        [UserId],
-        [PostTitle],
-        [PostContent],
-        [PostCreated],
-        [PostUpdated]
-      FROM TutorialAppSchema.Posts
-      WHERE UserId = " + User.FindFirst("userId")?.Value;
+    string sql = @"EXEC TutorialAppSchema.spPosts_Get @UserId = " + User.FindFirst("userId")?.Value;
 
     var posts = _dapper.LoadData<Post>(sql);
     return posts;
   }
 
-  [HttpPut("EditPost")]
-  public IActionResult EditPost(PostToEditDto post)
+  [HttpPost("CreatePost")]
+  public IActionResult CreatePost([FromBody] PostDto post)
   {
-    string sql = @"
-      UPDATE TutorialAppSchema.Posts
-        SET [PostTitle] = '" + post.PostTitle +
-        "', [PostContent] = '" + post.PostContent +
-        "', [PostUpdated] = GETDATE() WHERE PostId = " + post.PostId +
-        " AND UserId = " + User.FindFirst("userId")?.Value;
-    Console.WriteLine(sql);
-
-    if (_dapper.ExecuteSql(sql))
+    try
     {
-      return Ok();
+      var parameters = new DynamicParameters();
+
+      parameters.Add("@UserId", User.FindFirst("userId")?.Value);
+      parameters.Add("@PostId", post.PostId ?? default(int?));
+      parameters.Add("@PostTitle", post.PostTitle);
+      parameters.Add("@PostContent", post.PostContent);
+
+      string sql = @"EXEC TutorialAppSchema.spPosts_Upsert @UserId, @PostId, @PostTitle, @PostContent";
+
+      _dapper.LoadData<Post>(sql, parameters);
+      return Ok("Post created successfully!");
     }
-    throw new Exception("Failed to update post");
+    catch (Exception ex)
+    {
+      Console.WriteLine(ex.ToString());
+      return StatusCode(500, "Internal Server Error. Please try again later.");
+    }
   }
 
-  [HttpPost("AddPost")]
-  public IActionResult AddPost(PostToAddDto post)
+  [HttpPut("UpdatePost/{postId}")]
+  public IActionResult CreatePost(int postId, [FromBody] PostDto post)
   {
-    string sql = @"INSERT INTO TutorialAppSchema.Posts(
-        [UserId],
-        [PostTitle],
-        [PostContent],
-        [PostCreated],
-        [PostUpdated]
-      ) VALUES (" + User.FindFirst("userId")?.Value +
-        ", '" + post.PostTitle +
-        "', '" + post.PostContent +
-        "', GETDATE(), GETDATE())";
-
-    Console.WriteLine(sql);
-
-    if (_dapper.ExecuteSql(sql))
+    try
     {
-      return Ok();
+      var parameters = new DynamicParameters();
+      parameters.Add("@UserId", User.FindFirst("userId")?.Value);
+      parameters.Add("@PostId", postId);
+      parameters.Add("@PostTitle", post.PostTitle);
+      parameters.Add("@PostContent", post.PostContent);
+
+      string sql = @"EXEC TutorialAppSchema.spPosts_Upsert @UserId, @PostId, @PostTitle, @PostContent";
+
+      _dapper.LoadData<Post>(sql, parameters);
+      return Ok("Post updated successfully!");
     }
-    throw new Exception("Failed to add post");
+    catch (Exception ex)
+    {
+      Console.WriteLine(ex.ToString());
+      return StatusCode(500, "Internal Server Error. Please try again later.");
+    }
   }
 
   [HttpDelete("DeletePost/{postId}")]
   public IActionResult DeletePost(int postId)
   {
-    string sql = @"
-      DELETE FROM TutorialAppSchema.Posts
-        WHERE PostId = " + postId.ToString() +
-        "AND UserId = " + User.FindFirst("userId")?.Value;
-
-    if (_dapper.ExecuteSql(sql))
+    try
     {
-      return Ok();
+      var parameters = new DynamicParameters();
+      parameters.Add("@UserId", User.FindFirst("userId")?.Value);
+      parameters.Add("@PostId", postId);
+
+      string sql = @"EXEC TutorialAppSchema.spPost_Delete @PostId, @UserId";
+
+      if (_dapper.ExecuteSql(sql, parameters))
+      {
+        return Ok();
+      }
+      else
+      {
+        return NotFound("Post not found or no permission to delete.");
+      }
     }
-    throw new Exception("Failed to delete post");
+    catch (Exception ex)
+    {
+      Console.WriteLine(ex.ToString());
+      return StatusCode(500, "Failed to delete post");
+    }
   }
 }
 

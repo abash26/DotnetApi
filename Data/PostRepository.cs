@@ -24,7 +24,7 @@ public class PostRepository : IPostRepository
         .ToListAsync();
   }
 
-  public async Task<Post?> GetSinglePostAsync(int postId)
+  public async Task<Post?> GetSinglePostAsync(int? postId)
   {
     return await _entityFramework.Post.FirstOrDefaultAsync(p => p.PostId == postId);
   }

@@ -56,7 +56,7 @@ public class PostEFController : ControllerBase
   }
 
   [HttpPost("AddPost")]
-  public async Task<IActionResult> AddPost(PostToAddDto postDto)
+  public async Task<IActionResult> AddPost(PostDto postDto)
   {
     if (!int.TryParse(User.FindFirst("userId")?.Value, out int userId))
       return BadRequest("Invalid user ID.");
@@ -81,7 +81,7 @@ public class PostEFController : ControllerBase
   }
 
   [HttpPut("EditPost")]
-  public async Task<IActionResult> EditPost(PostToEditDto postEditDto)
+  public async Task<IActionResult> EditPost(PostDto postEditDto)
   {
     var post = await _postRepository.GetSinglePostAsync(postEditDto.PostId);
 
