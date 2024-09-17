@@ -22,10 +22,11 @@ public class UserCompleteController : ControllerBase
     try
     {
       string sql = "EXEC TutorialAppSchema.spUsers_Get @UserId, @Active";
-      var parameters = new DynamicParameters();
-
-      parameters.Add("@UserId", userId);
-      parameters.Add("@Active", isActive);
+      var parameters = new DynamicParameters(new
+      {
+        userId,
+        isActive
+      });
 
       var users = _dapper.LoadData<UserComplete>(sql, parameters);
       return Ok(users);
@@ -40,17 +41,28 @@ public class UserCompleteController : ControllerBase
   public IActionResult EditUser(UserComplete user)
   {
     string sql = @"EXEC TutorialAppSchema.spUser_Upsert
-        @FirstName = '" + user.FirstName +
-        "', @LastName = '" + user.LastName +
-        "', @Email = '" + user.Email +
-        "', @Gender = '" + user.Gender +
-        "', @Active = '" + user.Active +
-        "', @JobTitle = '" + user.JobTitle +
-        "', @Department = '" + user.Department +
-        "', @Salary = '" + user.Salary +
-        "', @UserId = " + user.UserId;
+        @FirstName,
+        @LastName,
+        @Email,
+        @Gender,
+        @Active,
+        @JobTitle,
+        @Department,
+        @Salary,
+        @UserId";
 
-    if (_dapper.ExecuteSql(sql))
+    var parameters = new DynamicParameters();
+    parameters.Add("FirstName", user.FirstName);
+    parameters.Add("LastName", user.LastName);
+    parameters.Add("Email", user.Email);
+    parameters.Add("Gender", user.Gender);
+    parameters.Add("Active", user.Active);
+    parameters.Add("JobTitle", user.JobTitle);
+    parameters.Add("Department", user.Department);
+    parameters.Add("Salary", user.Salary);
+    parameters.Add("UserId", user.UserId);
+
+    if (_dapper.ExecuteSql(sql, parameters))
     {
       return Ok();
     }
@@ -60,9 +72,11 @@ public class UserCompleteController : ControllerBase
   [HttpDelete("DeleteUser/{userId}")]
   public IActionResult DeleteUser(int userId)
   {
-    string sql = @"EXEC TutorialAppSchema.spUser_Delete 
-      @UserId = " + userId.ToString();
-    if (_dapper.ExecuteSql(sql))
+    string sql = @"EXEC TutorialAppSchema.spUser_Delete @UserId";
+    var parameters = new DynamicParameters();
+    parameters.Add("UserId", userId.ToString());
+
+    if (_dapper.ExecuteSql(sql, parameters))
     {
       return Ok();
     }

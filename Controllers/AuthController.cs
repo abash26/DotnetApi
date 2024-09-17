@@ -1,11 +1,9 @@
-using System.Data;
-using System.Security.Cryptography;
+using Dapper;
 using DotnetApi.Data;
 using DotnetApi.Dtos;
 using DotnetApi.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 
 namespace DotnetApi.Controllers;
 
@@ -25,79 +23,77 @@ public class AuthController : ControllerBase
 
   [AllowAnonymous]
   [HttpPost("Register")]
-  public IActionResult Register(UserForRegistrationDto userToRegister)
+  public IActionResult Register([FromBody] UserForRegistrationDto userToRegister)
   {
-    if (userToRegister.Password == userToRegister.PasswordConfirm)
+    if (userToRegister.Password != userToRegister.PasswordConfirm)
     {
-      var sqlUserExists = @"SELECT Email FROM TutorialAppSchema.Auth
-        WHERE Email = '" + userToRegister.Email + "'";
-
-      var existingUsers = _dapper.LoadData<string>(sqlUserExists);
-
-      if (existingUsers.Count() == 0)
-      {
-        var passwordSalt = new byte[128 / 8];
-        using (RandomNumberGenerator rng = RandomNumberGenerator.Create())
-        {
-          rng.GetNonZeroBytes(passwordSalt);
-        }
-
-        var passwordHash = _authHelper.GetPasswordHash(userToRegister.Password, passwordSalt);
-
-        string sqlAddAuth = @"INSERT INTO TutorialAppSchema.Auth (
-          [Email],
-          [PasswordHash],
-          [PasswordSalt]
-        ) VALUES ('" + userToRegister.Email +
-          "', @PasswordHash, @PasswordSalt)";
-
-        var sqlParameters = new List<SqlParameter>();
-        var passwordSaltParam = new SqlParameter("@PasswordSalt", SqlDbType.VarBinary)
-        {
-          Value = passwordSalt
-        };
-
-        var passwordHashParam = new SqlParameter("@PasswordHash", SqlDbType.VarBinary)
-        {
-          Value = passwordHash
-        };
-
-        sqlParameters.Add(passwordSaltParam);
-        sqlParameters.Add(passwordHashParam);
-        if (_dapper.ExecuteSqlWithParam(sqlAddAuth, sqlParameters))
-        {
-          string sqlAddUser = @"INSERT INTO TutorialAppSchema.Users(
-            [FirstName],
-            [LastName],
-            [Email],
-            [Gender],
-            [Active]
-          ) VALUES (" +
-              "'" + userToRegister.FirstName +
-              "', '" + userToRegister.LastName +
-              "', '" + userToRegister.Email +
-              "', '" + userToRegister.Gender +
-              "', 1)";
-          if (_dapper.ExecuteSql(sqlAddUser))
-          {
-            return Ok();
-          }
-          throw new Exception("Failed to add user");
-        }
-        throw new Exception("Failed to register user");
-      }
-      throw new Exception("User with this email already exists");
+      return BadRequest("Passwords do not match");
     }
-    throw new Exception("Passwords do not match");
+
+    var loginParams = new DynamicParameters(new { userToRegister.Email });
+    string sqlUserExists = @"EXEC TutorialAppSchema.spAuthUser_Get @Email";
+
+    var existingUsers = _dapper.LoadData<string>(sqlUserExists, loginParams);
+
+    if (existingUsers.Count() != 0)
+    {
+      return BadRequest("User with this email already exists");
+    }
+
+    var loginDto = new UserForLoginDto
+    {
+      Email = userToRegister.Email,
+      Password = userToRegister.Password
+    };
+
+    if (!_authHelper.SetPassword(loginDto))
+    {
+      return StatusCode(500, "Failed to register user");
+    }
+
+    var userParams = new DynamicParameters(new
+    {
+      userToRegister.FirstName,
+      userToRegister.LastName,
+      userToRegister.Email,
+      userToRegister.Gender,
+      userToRegister.JobTitle,
+      userToRegister.Department,
+      userToRegister.Salary,
+      Active = 1,
+    });
+
+    string sqlAddUser = @"EXEC TutorialAppSchema.spUser_Upsert 
+        @FirstName, @LastName, @Email, @Gender, @JobTitle, @Department, @Salary, @Active";
+
+    if (!_dapper.ExecuteSql(sqlAddUser, userParams))
+    {
+      return StatusCode(500, "Failed to update user");
+    }
+
+    return Ok("User registered successfully.");
+  }
+
+  [HttpPut("ResetPassword")]
+  public IActionResult ResetPassword([FromBody] UserForLoginDto userToSetPassword)
+  {
+    if (!_authHelper.SetPassword(userToSetPassword))
+    {
+      return StatusCode(500, "Failed to register user");
+    }
+    return Ok("Password updated successfully.");
   }
 
   [AllowAnonymous]
   [HttpPost("Login")]
   public IActionResult Login(UserForLoginDto userForLogin)
   {
-    var sqlForHashAndSalt = @"SELECT [PasswordHash], [PasswordSalt] FROM TutorialAppSchema.Auth
-         WHERE Email = '" + userForLogin.Email + "'";
-    var userForConfirmation = _dapper.LoadDataSingle<UserForLoginConfirmDto>(sqlForHashAndSalt);
+    var loginParams = new DynamicParameters();
+    loginParams.Add("@Email", userForLogin.Email);
+
+    string sqlForHashAndSalt = @"EXEC TutorialAppSchema.spLoginConfirmation_Get @Email";
+
+    var userForConfirmation = _dapper.LoadDataSingle<UserForLoginConfirmDto>(sqlForHashAndSalt, loginParams);
 
     var passwordHash = _authHelper.GetPasswordHash(userForLogin.Password, userForConfirmation.PasswordSalt);
 
@@ -109,10 +105,9 @@ public class AuthController : ControllerBase
       }
     }
 
-    var userIdsql = @"SELECT [userId] FROM TutorialAppSchema.Users
-         WHERE Email = '" + userForLogin.Email + "'";
+    string userIdsql = @"EXEC TutorialAppSchema.spUser_Get @Email";
 
-    var userId = _dapper.LoadDataSingle<int>(userIdsql);
+    var userId = _dapper.LoadDataSingle<int>(userIdsql, loginParams);
 
     return Ok(new Dictionary<string, string> {
       {"token", _authHelper.CreateToken(userId)}
@@ -122,9 +117,15 @@ public class AuthController : ControllerBase
   [HttpGet("RefreshToken")]
   public IActionResult RefreshToken()
   {
-    var userId = User.FindFirst("userId")?.Value + "";
-    var userIdSql = "SELECT UserId FROM TutorialAppSchema.Users WHERE UserId = " + userId;
-    var userIdFromDb = _dapper.LoadDataSingle<int>(userIdSql);
+    var userIdString = User.FindFirst("userId")?.Value + "";
+    if (string.IsNullOrEmpty(userIdString))
+    {
+      return BadRequest("Authentication failed. User ID is missing.");
+    }
+
+    var userParams = new DynamicParameters(new { UserId = userIdString });
+
+    var userIdFromDb = _dapper.LoadDataSingle<int>(@"EXEC TutorialAppSchema.spUser_Get @UserId", userParams);
 
     return Ok(new Dictionary<string, string> {
       {"token", _authHelper.CreateToken(userIdFromDb)}

@@ -28,8 +28,8 @@ public class PostController : ControllerBase
     try
     {
       string sql = "EXEC TutorialAppSchema.spPosts_Get @UserId, @SearchValue, @PostId";
-      var parameters = new DynamicParameters();
 
+      var parameters = new DynamicParameters();
       parameters.Add("@UserId", userId);
       parameters.Add("@SearchValue", searchValue);
       parameters.Add("@PostId", postId);
@@ -47,9 +47,11 @@ public class PostController : ControllerBase
   [HttpGet("GetMyPosts")]
   public IEnumerable<Post> GetMyPosts()
   {
-    string sql = @"EXEC TutorialAppSchema.spPosts_Get @UserId = " + User.FindFirst("userId")?.Value;
+    var parameters = new DynamicParameters();
+    parameters.Add("@UserId", User.FindFirst("userId")?.Value);
+    string sql = @"EXEC TutorialAppSchema.spPosts_Get @UserId";
 
-    var posts = _dapper.LoadData<Post>(sql);
+    var posts = _dapper.LoadData<Post>(sql, parameters);
     return posts;
   }
 

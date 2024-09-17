@@ -19,10 +19,10 @@ class DataContextDapper
     return results;
   }
 
-  public T LoadDataSingle<T>(string sql)
+  public T? LoadDataSingle<T>(string sql, DynamicParameters parameters = null)
   {
     var dbConnection = new SqlConnection(_config.GetConnectionString("DefaultConnection"));
-    return dbConnection.QuerySingle<T>(sql);
+    return dbConnection.QuerySingleOrDefault<T>(sql, parameters);
   }
 
   public bool ExecuteSql(string sql, DynamicParameters parameters = null)
@@ -35,24 +35,5 @@ class DataContextDapper
   {
     var dbConnection = new SqlConnection(_config.GetConnectionString("DefaultConnection"));
     return dbConnection.Execute(sql);
-  }
-
-  public bool ExecuteSqlWithParam(string sql, List<SqlParameter> parameters)
-  {
-    var command = new SqlCommand(sql);
-    foreach (SqlParameter parameter in parameters)
-    {
-      command.Parameters.Add(parameter);
-    }
-
-    var dbConnection = new SqlConnection(_config.GetConnectionString("DefaultConnection"));
-    dbConnection.Open();
-
-    command.Connection = dbConnection;
-
-    var rowsAffected = command.ExecuteNonQuery();
-    dbConnection.Close();
-
-    return rowsAffected > 0;
   }
 }
